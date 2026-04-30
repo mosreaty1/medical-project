@@ -1,1 +1,1 @@
-const String kHfApiToken = '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';
+const String kHfApiToken = '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';
