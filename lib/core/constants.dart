@@ -4,9 +4,9 @@ const String kBaseUrl = 'https://router.huggingface.co/hf-inference/models';
 /// خريطة نوع الفحص → معرّف النموذج على Hugging Face
 const Map<String, String> kModelIds = {
   'chest_xray': 'lxyuan/vit-xray-pneumonia-classification',
-  'skin_cancer': 'NeuronZero/SkinCancerClassifier',
-  'eye_disease': 'NeuronZero/EyeDiseaseClassifier',
-  'brain_tumor': 'DunnBC22/efficientnet-b5-Brain_Tumors_Image_Classification',
+  'skin_cancer': 'Anwarkh1/Skin_Cancer-Image_Classification',
+  'eye_disease': 'hasnainali/vit-eye-disease-classification',
+  'brain_tumor': 'Devarshi/Brain_Tumor_Classification',
 };
 
 /// العلامات "الطبيعية" التي تُظهر البطاقة باللون الأخضر
