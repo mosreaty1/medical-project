@@ -7,6 +7,12 @@ const String kGroqToken = kGroqApiToken;
 const String kGroqBaseUrl = 'https://api.groq.com/openai/v1/chat/completions';
 const String kGroqModel = 'meta-llama/llama-4-scout-17b-16e-instruct';
 
+const String kNvidiaToken = kNvidiaApiToken;
+const String kNvidiaBaseUrl = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const String kNvidiaModel = 'z-ai/glm4.7';
+
+enum AiProvider { auto, groq, nvidia, huggingface }
+
 /// Labels for each scan type used in Groq prompts
 const Map<String, List<String>> kScanLabels = {
   'chest_xray': ['NORMAL', 'PNEUMONIA'],

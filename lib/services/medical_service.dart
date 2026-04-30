@@ -6,26 +6,33 @@ import 'package:image/image.dart' as img;
 import '../core/constants.dart';
 import '../models/scan_result.dart';
 import 'groq_service.dart';
+import 'nvidia_service.dart';
 
 class MedicalService {
   static final Map<String, String> _confirmedHfModels = {};
+  static AiProvider selectedProvider = AiProvider.auto;
 
-  /// تصنيف صورة طبية — يجرّب Groq أولاً ثم HF احتياطاً
   static Future<ScanResult> classify({
     required File image,
     required String type,
   }) async {
-    // Try Groq first (faster, more reliable)
-    if (kGroqToken.isNotEmpty) {
-      try {
-        return await GroqService.classify(image: image, type: type);
-      } catch (_) {
-        // Groq failed — fall through to HF
-      }
+    switch (selectedProvider) {
+      case AiProvider.groq:
+        return GroqService.classify(image: image, type: type);
+      case AiProvider.nvidia:
+        return NvidiaService.classify(image: image, type: type);
+      case AiProvider.huggingface:
+        return _classifyWithHf(image: image, type: type);
+      case AiProvider.auto:
+        // Try all in order: Groq → NVIDIA → HF
+        if (kGroqToken.isNotEmpty) {
+          try { return await GroqService.classify(image: image, type: type); } catch (_) {}
+        }
+        if (kNvidiaToken.isNotEmpty) {
+          try { return await NvidiaService.classify(image: image, type: type); } catch (_) {}
+        }
+        return _classifyWithHf(image: image, type: type);
     }
-
-    // Fallback: Hugging Face Inference API
-    return _classifyWithHf(image: image, type: type);
   }
 
   static Future<ScanResult> _classifyWithHf({
