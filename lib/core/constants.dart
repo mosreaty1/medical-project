@@ -2,7 +2,7 @@
 // ضع المفتاح في lib/core/secrets.dart (مُستثنى من git)
 import 'secrets.dart';
 const String kHfToken = kHfApiToken;
-const String kBaseUrl = 'https://api-inference.huggingface.co/models';
+const String kBaseUrl = 'https://router.huggingface.co/hf-inference/models';
 
 /// خريطة نوع الفحص → معرّف النموذج على Hugging Face
 const Map<String, String> kModelIds = {
