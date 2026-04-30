@@ -10,28 +10,29 @@ import 'nvidia_service.dart';
 
 class MedicalService {
   static final Map<String, String> _confirmedHfModels = {};
+  static AiProvider selectedProvider = AiProvider.auto;
 
-  /// تصنيف صورة طبية — يجرّب Groq ثم NVIDIA ثم HF احتياطاً
   static Future<ScanResult> classify({
     required File image,
     required String type,
   }) async {
-    // 1. Try Groq first (fastest)
-    if (kGroqToken.isNotEmpty) {
-      try {
-        return await GroqService.classify(image: image, type: type);
-      } catch (_) {}
+    switch (selectedProvider) {
+      case AiProvider.groq:
+        return GroqService.classify(image: image, type: type);
+      case AiProvider.nvidia:
+        return NvidiaService.classify(image: image, type: type);
+      case AiProvider.huggingface:
+        return _classifyWithHf(image: image, type: type);
+      case AiProvider.auto:
+        // Try all in order: Groq → NVIDIA → HF
+        if (kGroqToken.isNotEmpty) {
+          try { return await GroqService.classify(image: image, type: type); } catch (_) {}
+        }
+        if (kNvidiaToken.isNotEmpty) {
+          try { return await NvidiaService.classify(image: image, type: type); } catch (_) {}
+        }
+        return _classifyWithHf(image: image, type: type);
     }
-
-    // 2. Try NVIDIA GLM
-    if (kNvidiaToken.isNotEmpty) {
-      try {
-        return await NvidiaService.classify(image: image, type: type);
-      } catch (_) {}
-    }
-
-    // 3. Fallback: Hugging Face Inference API
-    return _classifyWithHf(image: image, type: type);
   }
 
   static Future<ScanResult> _classifyWithHf({
