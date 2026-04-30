@@ -1,6 +1,6 @@
 import 'secrets.dart';
 
-const String kHfToken = String.fromEnvironment('HF_TOKEN');
+const String kHfToken = kHfApiToken;
 const String kBaseUrl = 'https://router.huggingface.co/hf-inference/models';
 
 const String kGroqToken = kGroqApiToken;
