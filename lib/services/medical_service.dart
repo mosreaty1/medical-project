@@ -7,6 +7,9 @@ import '../core/constants.dart';
 import '../models/scan_result.dart';
 
 class MedicalService {
+  // Cache confirmed working models so we only check once per session
+  static final Map<String, String> _confirmedModels = {};
+
   /// تصنيف صورة طبية عبر Hugging Face Inference API
   static Future<ScanResult> classify({
     required File image,
@@ -18,29 +21,51 @@ class MedicalService {
     }
 
     final imageBytes = await _prepareImage(image);
-    Exception? lastError;
 
-    for (final modelId in models) {
-      try {
-        final result = await _tryModel(
-          modelId: modelId,
-          imageBytes: imageBytes,
-          type: type,
-        );
-        return result;
-      } on _UnsupportedModelException {
-        // هذا النموذج غير مدعوم — جرّب التالي
-        lastError = Exception('لا يوجد نموذج متاح حالياً لهذا النوع من الفحص.');
-        continue;
-      } catch (e) {
-        rethrow;
-      }
+    // Use cached model if already confirmed working this session
+    if (_confirmedModels.containsKey(type)) {
+      return _callInference(
+        modelId: _confirmedModels[type]!,
+        imageBytes: imageBytes,
+        type: type,
+      );
     }
 
-    throw lastError ?? Exception('فشل تحميل النموذج.');
+    // Find first model that HF confirms is supported
+    final modelId = await _findSupportedModel(models);
+    if (modelId == null) {
+      throw Exception(
+        'لا يوجد نموذج متاح حالياً لهذا النوع من الفحص. يُرجى المحاولة لاحقاً.',
+      );
+    }
+
+    _confirmedModels[type] = modelId;
+    return _callInference(modelId: modelId, imageBytes: imageBytes, type: type);
   }
 
-  static Future<ScanResult> _tryModel({
+  /// يتحقق من قائمة النماذج ويعيد أول نموذج مدعوم من مزوّد HF
+  static Future<String?> _findSupportedModel(List<String> models) async {
+    for (final modelId in models) {
+      try {
+        final res = await http
+            .get(Uri.parse('https://huggingface.co/api/models/$modelId'))
+            .timeout(const Duration(seconds: 8));
+
+        if (res.statusCode == 200) {
+          final data = json.decode(res.body) as Map<String, dynamic>;
+          final inference = data['inference'] as String?;
+          if (inference == 'warm' || inference == 'cold') {
+            return modelId;
+          }
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  static Future<ScanResult> _callInference({
     required String modelId,
     required Uint8List imageBytes,
     required String type,
@@ -60,11 +85,6 @@ class MedicalService {
       if (response.statusCode == 200) {
         final List<dynamic> jsonBody = json.decode(response.body);
         return ScanResult.fromJson(jsonBody, type);
-      }
-
-      // النموذج غير مدعوم أو محذوف — انتقل للتالي في القائمة
-      if (response.statusCode == 400 || response.statusCode == 410) {
-        throw _UnsupportedModelException();
       }
 
       if (response.statusCode == 503) {
@@ -97,5 +117,3 @@ class MedicalService {
     return Uint8List.fromList(img.encodeJpg(resized, quality: 90));
   }
 }
-
-class _UnsupportedModelException implements Exception {}
