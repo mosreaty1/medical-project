@@ -27,7 +27,7 @@ const Map<String, List<String>> kModelFallbacks = {
 
 /// العلامات "الطبيعية" التي تُظهر البطاقة باللون الأخضر
 const Set<String> kNormalLabels = {
-  'normal', 'notumor', 'NORMAL', 'no-tumor', 'No Tumor', 'NORMAL'
+  'normal', 'notumor', 'NORMAL', 'no-tumor', 'No Tumor'
 };
 
 const int kMaxRetries = 3;
