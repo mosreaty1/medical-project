@@ -227,7 +227,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           const Text(
-            'روان أيمن  •  محمد الصريتي',
+            'روان أيمن  •  محمد السريتي',
             style: TextStyle(fontSize: 13, color: Color(0xFF1A8FE3)),
           ),
           const SizedBox(height: 4),
