@@ -1,5 +1,7 @@
 // احصل على مفتاح API من: https://huggingface.co/settings/tokens
-const String kHfToken = 'YOUR_HF_TOKEN';
+// ضع المفتاح في lib/core/secrets.dart (مُستثنى من git)
+import 'secrets.dart';
+const String kHfToken = kHfApiToken;
 const String kBaseUrl = 'https://api-inference.huggingface.co/models';
 
 /// خريطة نوع الفحص → معرّف النموذج على Hugging Face
