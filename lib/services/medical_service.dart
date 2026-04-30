@@ -12,13 +12,40 @@ class MedicalService {
     required File image,
     required String type,
   }) async {
-    final modelId = kModelIds[type];
-    if (modelId == null) {
+    final models = kModelFallbacks[type];
+    if (models == null || models.isEmpty) {
       throw Exception('نوع الفحص غير مدعوم: $type');
     }
 
-    final url = Uri.parse('$kBaseUrl/$modelId');
     final imageBytes = await _prepareImage(image);
+    Exception? lastError;
+
+    for (final modelId in models) {
+      try {
+        final result = await _tryModel(
+          modelId: modelId,
+          imageBytes: imageBytes,
+          type: type,
+        );
+        return result;
+      } on _UnsupportedModelException {
+        // هذا النموذج غير مدعوم — جرّب التالي
+        lastError = Exception('لا يوجد نموذج متاح حالياً لهذا النوع من الفحص.');
+        continue;
+      } catch (e) {
+        rethrow;
+      }
+    }
+
+    throw lastError ?? Exception('فشل تحميل النموذج.');
+  }
+
+  static Future<ScanResult> _tryModel({
+    required String modelId,
+    required Uint8List imageBytes,
+    required String type,
+  }) async {
+    final url = Uri.parse('$kBaseUrl/$modelId');
 
     for (int attempt = 0; attempt < kMaxRetries; attempt++) {
       final response = await http.post(
@@ -35,20 +62,21 @@ class MedicalService {
         return ScanResult.fromJson(jsonBody, type);
       }
 
+      // النموذج غير مدعوم أو محذوف — انتقل للتالي في القائمة
+      if (response.statusCode == 400 || response.statusCode == 410) {
+        throw _UnsupportedModelException();
+      }
+
       if (response.statusCode == 503) {
         if (attempt < kMaxRetries - 1) {
           // النموذج في طور الإقلاع البارد — انتظر ثم أعد المحاولة
           await Future.delayed(const Duration(seconds: kRetryDelaySeconds));
           continue;
         }
-        throw Exception(
-          'النموذج غير متاح حالياً، يُرجى المحاولة مجدداً بعد قليل.',
-        );
+        throw Exception('النموذج غير متاح حالياً، يُرجى المحاولة مجدداً بعد قليل.');
       }
 
-      throw Exception(
-        'فشل الطلب (${response.statusCode}): ${response.body}',
-      );
+      throw Exception('فشل الطلب (${response.statusCode}): ${response.body}');
     }
 
     throw Exception('تجاوز الحد الأقصى لعدد المحاولات.');
@@ -69,3 +97,5 @@ class MedicalService {
     return Uint8List.fromList(img.encodeJpg(resized, quality: 90));
   }
 }
+
+class _UnsupportedModelException implements Exception {}
