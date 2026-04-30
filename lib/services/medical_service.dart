@@ -5,13 +5,30 @@ import 'dart:convert';
 import 'package:image/image.dart' as img;
 import '../core/constants.dart';
 import '../models/scan_result.dart';
+import 'groq_service.dart';
 
 class MedicalService {
-  // Cache confirmed working models so we only check once per session
-  static final Map<String, String> _confirmedModels = {};
+  static final Map<String, String> _confirmedHfModels = {};
 
-  /// تصنيف صورة طبية عبر Hugging Face Inference API
+  /// تصنيف صورة طبية — يجرّب Groq أولاً ثم HF احتياطاً
   static Future<ScanResult> classify({
+    required File image,
+    required String type,
+  }) async {
+    // Try Groq first (faster, more reliable)
+    if (kGroqToken.isNotEmpty) {
+      try {
+        return await GroqService.classify(image: image, type: type);
+      } catch (_) {
+        // Groq failed — fall through to HF
+      }
+    }
+
+    // Fallback: Hugging Face Inference API
+    return _classifyWithHf(image: image, type: type);
+  }
+
+  static Future<ScanResult> _classifyWithHf({
     required File image,
     required String type,
   }) async {
@@ -22,16 +39,14 @@ class MedicalService {
 
     final imageBytes = await _prepareImage(image);
 
-    // Use cached model if already confirmed working this session
-    if (_confirmedModels.containsKey(type)) {
-      return _callInference(
-        modelId: _confirmedModels[type]!,
+    if (_confirmedHfModels.containsKey(type)) {
+      return _callHfModel(
+        modelId: _confirmedHfModels[type]!,
         imageBytes: imageBytes,
         type: type,
       );
     }
 
-    // Find first model that HF confirms is supported
     final modelId = await _findSupportedModel(models);
     if (modelId == null) {
       throw Exception(
@@ -39,11 +54,10 @@ class MedicalService {
       );
     }
 
-    _confirmedModels[type] = modelId;
-    return _callInference(modelId: modelId, imageBytes: imageBytes, type: type);
+    _confirmedHfModels[type] = modelId;
+    return _callHfModel(modelId: modelId, imageBytes: imageBytes, type: type);
   }
 
-  /// يتحقق من قائمة النماذج ويعيد أول نموذج مدعوم من مزوّد HF
   static Future<String?> _findSupportedModel(List<String> models) async {
     for (final modelId in models) {
       try {
@@ -54,9 +68,7 @@ class MedicalService {
         if (res.statusCode == 200) {
           final data = json.decode(res.body) as Map<String, dynamic>;
           final inference = data['inference'] as String?;
-          if (inference == 'warm' || inference == 'cold') {
-            return modelId;
-          }
+          if (inference == 'warm' || inference == 'cold') return modelId;
         }
       } catch (_) {
         continue;
@@ -65,7 +77,7 @@ class MedicalService {
     return null;
   }
 
-  static Future<ScanResult> _callInference({
+  static Future<ScanResult> _callHfModel({
     required String modelId,
     required Uint8List imageBytes,
     required String type,
@@ -89,7 +101,6 @@ class MedicalService {
 
       if (response.statusCode == 503) {
         if (attempt < kMaxRetries - 1) {
-          // النموذج في طور الإقلاع البارد — انتظر ثم أعد المحاولة
           await Future.delayed(const Duration(seconds: kRetryDelaySeconds));
           continue;
         }
@@ -102,18 +113,12 @@ class MedicalService {
     throw Exception('تجاوز الحد الأقصى لعدد المحاولات.');
   }
 
-  /// تغيير حجم الصورة إلى 224×224 وإعادة ترميزها كـ JPEG
   static Future<Uint8List> _prepareImage(File file) async {
     final rawBytes = await file.readAsBytes();
     final decoded = img.decodeImage(rawBytes);
     if (decoded == null) throw Exception('تعذّر فك ضغط الصورة.');
 
-    final resized = img.copyResize(
-      decoded,
-      width: kImageSize,
-      height: kImageSize,
-    );
-
+    final resized = img.copyResize(decoded, width: kImageSize, height: kImageSize);
     return Uint8List.fromList(img.encodeJpg(resized, quality: 90));
   }
 }
