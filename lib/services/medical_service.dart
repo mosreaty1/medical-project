@@ -7,18 +7,70 @@ import '../core/constants.dart';
 import '../models/scan_result.dart';
 
 class MedicalService {
+  // Cache confirmed working models so we only check once per session
+  static final Map<String, String> _confirmedModels = {};
+
   /// تصنيف صورة طبية عبر Hugging Face Inference API
   static Future<ScanResult> classify({
     required File image,
     required String type,
   }) async {
-    final modelId = kModelIds[type];
-    if (modelId == null) {
+    final models = kModelFallbacks[type];
+    if (models == null || models.isEmpty) {
       throw Exception('نوع الفحص غير مدعوم: $type');
     }
 
-    final url = Uri.parse('$kBaseUrl/$modelId');
     final imageBytes = await _prepareImage(image);
+
+    // Use cached model if already confirmed working this session
+    if (_confirmedModels.containsKey(type)) {
+      return _callInference(
+        modelId: _confirmedModels[type]!,
+        imageBytes: imageBytes,
+        type: type,
+      );
+    }
+
+    // Find first model that HF confirms is supported
+    final modelId = await _findSupportedModel(models);
+    if (modelId == null) {
+      throw Exception(
+        'لا يوجد نموذج متاح حالياً لهذا النوع من الفحص. يُرجى المحاولة لاحقاً.',
+      );
+    }
+
+    _confirmedModels[type] = modelId;
+    return _callInference(modelId: modelId, imageBytes: imageBytes, type: type);
+  }
+
+  /// يتحقق من قائمة النماذج ويعيد أول نموذج مدعوم من مزوّد HF
+  static Future<String?> _findSupportedModel(List<String> models) async {
+    for (final modelId in models) {
+      try {
+        final res = await http
+            .get(Uri.parse('https://huggingface.co/api/models/$modelId'))
+            .timeout(const Duration(seconds: 8));
+
+        if (res.statusCode == 200) {
+          final data = json.decode(res.body) as Map<String, dynamic>;
+          final inference = data['inference'] as String?;
+          if (inference == 'warm' || inference == 'cold') {
+            return modelId;
+          }
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  static Future<ScanResult> _callInference({
+    required String modelId,
+    required Uint8List imageBytes,
+    required String type,
+  }) async {
+    final url = Uri.parse('$kBaseUrl/$modelId');
 
     for (int attempt = 0; attempt < kMaxRetries; attempt++) {
       final response = await http.post(
@@ -41,14 +93,10 @@ class MedicalService {
           await Future.delayed(const Duration(seconds: kRetryDelaySeconds));
           continue;
         }
-        throw Exception(
-          'النموذج غير متاح حالياً، يُرجى المحاولة مجدداً بعد قليل.',
-        );
+        throw Exception('النموذج غير متاح حالياً، يُرجى المحاولة مجدداً بعد قليل.');
       }
 
-      throw Exception(
-        'فشل الطلب (${response.statusCode}): ${response.body}',
-      );
+      throw Exception('فشل الطلب (${response.statusCode}): ${response.body}');
     }
 
     throw Exception('تجاوز الحد الأقصى لعدد المحاولات.');
