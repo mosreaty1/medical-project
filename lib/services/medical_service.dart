@@ -6,25 +6,31 @@ import 'package:image/image.dart' as img;
 import '../core/constants.dart';
 import '../models/scan_result.dart';
 import 'groq_service.dart';
+import 'nvidia_service.dart';
 
 class MedicalService {
   static final Map<String, String> _confirmedHfModels = {};
 
-  /// تصنيف صورة طبية — يجرّب Groq أولاً ثم HF احتياطاً
+  /// تصنيف صورة طبية — يجرّب Groq ثم NVIDIA ثم HF احتياطاً
   static Future<ScanResult> classify({
     required File image,
     required String type,
   }) async {
-    // Try Groq first (faster, more reliable)
+    // 1. Try Groq first (fastest)
     if (kGroqToken.isNotEmpty) {
       try {
         return await GroqService.classify(image: image, type: type);
-      } catch (_) {
-        // Groq failed — fall through to HF
-      }
+      } catch (_) {}
     }
 
-    // Fallback: Hugging Face Inference API
+    // 2. Try NVIDIA GLM
+    if (kNvidiaToken.isNotEmpty) {
+      try {
+        return await NvidiaService.classify(image: image, type: type);
+      } catch (_) {}
+    }
+
+    // 3. Fallback: Hugging Face Inference API
     return _classifyWithHf(image: image, type: type);
   }
 
